@@ -26,17 +26,25 @@ namespace mqttservice
         public static MqttFactory MqttFactory;
         #endregion
 
-        private async void Form1_Load(object sender, EventArgs e)
+        private void Form1_Load(object sender, EventArgs e)
         {
-            using (var dbContext = new hydroPhonicsDBEntities())
+            try
             {
-                if (dbContext.Database.Exists())
+                using (var dbContext = new hydroPhonicsDBEntities())
                 {
-                    lstNotifier.Items.Add("Status : Connected at " + DateTime.Now);
-                    //  await ConnectAsync();
-                    await StartMQTT();
+                    if (dbContext.Database.Exists())
+                    {
+                        lstNotifier.Items.Add("Status : Connected at " + DateTime.Now);
+                        //  await ConnectAsync();
+                        //await StartMQTT();
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message,"DB Connection");
+            }
+
         }
         public async Task StartMQTT()
         {
@@ -44,7 +52,7 @@ namespace mqttservice
             await Publish("Test", "Test123");
             mqttClient.UseConnectedHandler(async e => {           
             await SubscribeCommand("cmnd/#");
-            await SubscribeHydrophonics("hydrophonics/#");
+            await SubscribeHydrophonics("hydroponics/#");
             });
             mqttClient.UseApplicationMessageReceivedHandler(MessageReceived);
         }
@@ -90,6 +98,10 @@ namespace mqttservice
         {
             await mqttClient.SubscribeAsync(Topic);
         }
+        private async Task Disconnect()
+        {
+            await mqttClient.StopAsync();
+        }
         private void MessageReceived(MqttApplicationMessageReceivedEventArgs e)
         {
             this.Invoke(new MethodInvoker(() =>
@@ -100,10 +112,48 @@ namespace mqttservice
                 string _Payload = Encoding.UTF8.GetString(e.ApplicationMessage.Payload);
                 using (var dbContext = new hydroPhonicsDBEntities())
                 {
-                    dbContext.sensors.Add(new sensor{ SensorType =  _Topic, SensorData  = _Payload, DateCreated = DateTime.Now.ToString()});
+                    dbContext.sensors.Add(new sensor { SensorType = _Topic, SensorData = _Payload, DateCreated = DateTime.Now.ToString() });
                     dbContext.SaveChanges();
                 }
             }));
+        }
+
+        private async void startServiceToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            lstNotifier.Items.Add("Connected to MQTT Server!");
+            await StartMQTT();
+        }
+
+        private async void stopServiceToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            lstNotifier.Items.Add("Stopped Subscription!");
+            await Disconnect();
+        }
+
+        private void Form1_Resize(object sender, EventArgs e)
+        {
+            if (FormWindowState.Minimized == this.WindowState)
+            {
+                notifyIcon1.Visible = true;
+                notifyIcon1.ShowBalloonTip(500);
+                this.Hide();
+            }
+            else if (FormWindowState.Normal == this.WindowState)
+            {
+                notifyIcon1.Visible = false;
+            }
+        }
+
+        private void restoreWindowToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Form1.WindowState = FormWindowState.Normal;
+            if (this.WindowState == FormWindowState.Minimized)
+            {
+                this.WindowState = FormWindowState.Maximized;
+                this.Show();
+                this.Activate();
+            }
+
         }
     }
 }
